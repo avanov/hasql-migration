@@ -27,5 +27,5 @@ existsTable :: Text -> Transaction Bool
 existsTable table =
     fmap (not . null) $ statement table q
     where
-        q = Statement sql (Encoders.param (Encoders.nonNullable Encoders.text)) (Decoders.rowList (Decoders.column (Decoders.nullable Decoders.int8))) False
+        q = unpreparable sql (Encoders.param (Encoders.nonNullable Encoders.text)) (Decoders.rowList (Decoders.column (Decoders.nullable Decoders.int8)))
         sql = "select relname from pg_class where relname = $1"

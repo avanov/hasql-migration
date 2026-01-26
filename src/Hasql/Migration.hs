@@ -94,13 +94,13 @@ executeMigration name contents = do
             return Nothing
         ScriptNotExecuted -> do
             sql contents
-            statement (name, checksum) (Statement q enc Decoders.noResult False)
+            statement (name, checksum) (unpreparable q enc Decoders.noResult)
             return Nothing
         ScriptModified _ -> do
             return (Just $ ScriptChanged name)
     where
         q = "insert into schema_migrations(filename, checksum) values($1, $2)"
-        enc = ((T.pack . fst) >$< Encoders.param (Encoders.nonNullable Encoders.text)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        enc = ((T.pack . fst) >$< Encoders.param (Encoders.nonNullable Encoders.varchar)) <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.varchar))
 
 -- | Initializes the database schema with a helper table containing
 -- meta-information about executed migrations.
@@ -147,8 +147,8 @@ executeValidation cmd = case cmd of
 -- will be executed and its meta-information will be recorded.
 checkScript :: ScriptName -> Checksum -> Transaction CheckScriptResult
 checkScript name checksum =
-    statement name (Statement q (contramap T.pack (Encoders.param (Encoders.nonNullable Encoders.text))) 
-        (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.text))) False) >>= \case
+    statement name (unpreparable q (contramap T.pack (Encoders.param (Encoders.nonNullable Encoders.varchar))) 
+        (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.varchar)))) >>= \case
         Nothing ->
             return ScriptNotExecuted
         Just actualChecksum | checksum == actualChecksum ->
@@ -202,7 +202,7 @@ data MigrationError = ScriptChanged String | NotInitialised | ScriptMissing Stri
 -- | Produces a list of all executed 'SchemaMigration's.
 getMigrations :: Transaction [SchemaMigration]
 getMigrations =
-    statement () $ Statement q Encoders.noParams (Decoders.rowList decodeSchemaMigration) False
+    statement () $ unpreparable q Encoders.noParams (Decoders.rowList decodeSchemaMigration)
     where
         q = mconcat
             [ "select filename, checksum, executed_at "
@@ -226,6 +226,6 @@ instance Ord SchemaMigration where
 decodeSchemaMigration :: Decoders.Row SchemaMigration
 decodeSchemaMigration =
     SchemaMigration
-    <$> Decoders.column (Decoders.nonNullable Decoders.bytea)
-    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <$> (T.encodeUtf8 <$> Decoders.column (Decoders.nonNullable Decoders.varchar))
+    <*> Decoders.column (Decoders.nonNullable Decoders.varchar)
     <*> Decoders.column (Decoders.nonNullable Decoders.timestamp)
